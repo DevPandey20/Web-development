@@ -2,12 +2,28 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
+# =========================
+# PAGE CONFIGURATION (ONLY ONCE)
+# =========================
 st.set_page_config(
     page_title="CricketAI Analytics - Player Form & Match Prediction",
     page_icon="🏏",
     layout="wide"
 )
 
+# =========================
+# GOOGLE SEARCH CONSOLE VERIFICATION
+# =========================
+st.markdown(
+    """
+    <meta name="google-site-verification" content="4NjBAXWE0c2DOtAVxIaeZxHPEOK9VjFW8U_qVidyc4w" />
+    """,
+    unsafe_allow_html=True
+)
+
+# =========================
+# APP TITLE & DESCRIPTION
+# =========================
 st.title("🏏 CricketAI Analytics")
 st.markdown("""
 ### Player Form • Team Strength • Match Winner Prediction
@@ -15,14 +31,8 @@ st.markdown("""
 Welcome to **CricketAI Analytics**, a platform that provides:
 - 🔥 Player form analysis
 - 📊 Team strength comparison
-- 🏆 Match winner predictions for IPL and international cricket
+- 🏆 Match winner predictions for IPL and international cricket.
 """)
-
-# =========================
-# PAGE CONFIGURATION
-# =========================
-st.set_page_config(page_title="Cricket Analytics", layout="wide")
-st.title("🏏 Cricket Analytics & Match Prediction")
 
 # =========================
 # LOAD DATA
@@ -36,25 +46,11 @@ def load_data():
 df = load_data()
 
 # =========================
-# EXTRACT TEAMS
-# =========================
-def extract_teams(teams_column):
-    team_a, team_b = [], []
-    for match in teams_column.dropna():
-        if " vs " in match:
-            t1, t2 = match.split(" vs ")
-            team_a.append(t1.strip())
-            team_b.append(t2.strip())
-    return pd.DataFrame({"team_a": team_a, "team_b": team_b})
-
-teams_df = extract_teams(df["teams"])
-
-# =========================
 # CREATE TEAM STRENGTH TABLE
 # =========================
 team_rows = []
 for _, row in df.iterrows():
-    if " vs " in row["teams"]:
+    if isinstance(row["teams"], str) and " vs " in row["teams"]:
         t1, t2 = row["teams"].split(" vs ")
         team_rows.append([t1.strip(), row["runs"], row["wickets"]])
         team_rows.append([t2.strip(), row["runs"], row["wickets"]])
@@ -74,7 +70,11 @@ st.header("🏏 Match Setup")
 
 teams = sorted(team_stats["team"].unique())
 team_a = st.selectbox("Select Team A", teams)
-team_b = st.selectbox("Select Team B", teams, index=1 if len(teams) > 1 else 0)
+team_b = st.selectbox(
+    "Select Team B",
+    teams,
+    index=1 if len(teams) > 1 else 0
+)
 
 # Display team strengths
 col1, col2 = st.columns(2)
@@ -91,13 +91,21 @@ with col2:
 # =========================
 st.header("🔥 Player Form")
 
-player = st.selectbox("Select Player", sorted(df["player_name"].unique()))
-player_df = df[df["player_name"] == player].sort_values("date", ascending=False)
+player = st.selectbox(
+    "Select Player",
+    sorted(df["player_name"].unique())
+)
+
+player_df = df[df["player_name"] == player].sort_values(
+    "date", ascending=False
+)
 
 last5 = player_df.head(5)
 
 st.subheader("Last 5 Matches")
-st.dataframe(last5[["date", "runs", "wickets", "venue", "teams"]])
+st.dataframe(
+    last5[["date", "runs", "wickets", "venue", "teams"]]
+)
 
 avg_runs_last5 = last5["runs"].mean()
 avg_wickets_last5 = last5["wickets"].mean()
@@ -145,9 +153,15 @@ if st.button("Predict Winner"):
     else:
         st.success(f"🏆 {team_b} is likely to win!")
 
-    st.info(f"📊 Win Probability: {team_a} ({prob_a:.1f}%) vs {team_b} ({prob_b:.1f}%)")
+    st.info(
+        f"📊 Win Probability: {team_a} ({prob_a:.1f}%) "
+        f"vs {team_b} ({prob_b:.1f}%)"
+    )
 
-    st.metric("Strength Score Difference", f"{abs(strength_a - strength_b):.2f}")
+    st.metric(
+        "Strength Score Difference",
+        f"{abs(strength_a - strength_b):.2f}"
+    )
 
 # =========================
 # FOOTER
