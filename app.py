@@ -2,6 +2,22 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
+st.set_page_config(
+    page_title="CricketAI Analytics - Player Form & Match Prediction",
+    page_icon="🏏",
+    layout="wide"
+)
+
+st.title("🏏 CricketAI Analytics")
+st.markdown("""
+### Player Form • Team Strength • Match Winner Prediction
+
+Welcome to **CricketAI Analytics**, a platform that provides:
+- 🔥 Player form analysis
+- 📊 Team strength comparison
+- 🏆 Match winner predictions for IPL and international cricket
+""")
+
 # =========================
 # PAGE CONFIGURATION
 # =========================
