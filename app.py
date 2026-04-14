@@ -1,14 +1,12 @@
 import streamlit as st
 import pandas as pd
-import joblib
+import numpy as np
 
 # =========================
-# PAGE CONFIG
+# PAGE CONFIGURATION
 # =========================
-st.set_page_config(page_title="Cricket AI App", layout="wide")
-
-st.title("🏏 Cricket Analytics & AI System")
-st.header("🤖 Match Intelligence Engine")
+st.set_page_config(page_title="Cricket Analytics", layout="wide")
+st.title("🏏 Cricket Analytics & Match Prediction")
 
 # =========================
 # LOAD DATA
@@ -22,106 +20,121 @@ def load_data():
 df = load_data()
 
 # =========================
-# LOAD MODEL
+# EXTRACT TEAMS
 # =========================
-match_model = joblib.load("match_winner_model.pkl")
+def extract_teams(teams_column):
+    team_a, team_b = [], []
+    for match in teams_column.dropna():
+        if " vs " in match:
+            t1, t2 = match.split(" vs ")
+            team_a.append(t1.strip())
+            team_b.append(t2.strip())
+    return pd.DataFrame({"team_a": team_a, "team_b": team_b})
+
+teams_df = extract_teams(df["teams"])
 
 # =========================
-# SPLIT TEAMS CORRECTLY
+# CREATE TEAM STRENGTH TABLE
 # =========================
-def split_teams(row):
-    if isinstance(row, str) and " vs " in row:
-        return row.split(" vs ")
-    return [None, None]
-
 team_rows = []
-
 for _, row in df.iterrows():
-    t1, t2 = split_teams(row["teams"])
-    if t1 and t2:
+    if " vs " in row["teams"]:
+        t1, t2 = row["teams"].split(" vs ")
         team_rows.append([t1.strip(), row["runs"], row["wickets"]])
         team_rows.append([t2.strip(), row["runs"], row["wickets"]])
 
 team_df = pd.DataFrame(team_rows, columns=["team", "runs", "wickets"])
-team_stats = team_df.groupby("team").mean().reset_index()
+
+team_stats = team_df.groupby("team").agg(
+    avg_runs=("runs", "mean"),
+    avg_wickets=("wickets", "mean"),
+    matches=("runs", "count")
+).reset_index()
 
 # =========================
-# TEAM SELECTION
+# MATCH SETUP
 # =========================
-st.subheader("🏏 Match Setup")
+st.header("🏏 Match Setup")
 
 teams = sorted(team_stats["team"].unique())
-
 team_a = st.selectbox("Select Team A", teams)
-team_b = st.selectbox("Select Team B", teams)
+team_b = st.selectbox("Select Team B", teams, index=1 if len(teams) > 1 else 0)
+
+# Display team strengths
+col1, col2 = st.columns(2)
+with col1:
+    st.subheader(f"{team_a} Strength")
+    st.dataframe(team_stats[team_stats["team"] == team_a])
+
+with col2:
+    st.subheader(f"{team_b} Strength")
+    st.dataframe(team_stats[team_stats["team"] == team_b])
 
 # =========================
-# PLAYER FORM SECTION
+# PLAYER FORM ANALYSIS
 # =========================
-st.subheader("🔥 Player Form Analysis")
+st.header("🔥 Player Form")
 
 player = st.selectbox("Select Player", sorted(df["player_name"].unique()))
-
 player_df = df[df["player_name"] == player].sort_values("date", ascending=False)
 
 last5 = player_df.head(5)
 
-st.write("📊 Last 5 Matches")
+st.subheader("Last 5 Matches")
 st.dataframe(last5[["date", "runs", "wickets", "venue", "teams"]])
 
-avg_runs_5 = last5["runs"].mean()
-avg_wickets_5 = last5["wickets"].mean()
+avg_runs_last5 = last5["runs"].mean()
+avg_wickets_last5 = last5["wickets"].mean()
 
-st.metric("Avg Runs (Last 5)", f"{avg_runs_5:.2f}")
-st.metric("Avg Wickets (Last 5)", f"{avg_wickets_5:.2f}")
+col1, col2 = st.columns(2)
+col1.metric("Average Runs (Last 5)", f"{avg_runs_last5:.2f}")
+col2.metric("Average Wickets (Last 5)", f"{avg_wickets_last5:.2f}")
 
-# FORM LABEL
-if avg_runs_5 >= 40:
-    form = "🔥 Excellent Form"
-elif avg_runs_5 >= 20:
-    form = "👍 Good Form"
+# Form classification
+if avg_runs_last5 >= 40:
+    form = "🔥 Excellent"
+elif avg_runs_last5 >= 20:
+    form = "👍 Good"
 else:
-    form = "⚠️ Poor Form"
+    form = "⚠️ Needs Improvement"
 
-st.subheader(f"Form Status: {form}")
+st.success(f"Form Status: {form}")
 
 # =========================
-# TEAM STRENGTH FUNCTION
+# MATCH WINNER PREDICTION
 # =========================
-def get_strength(team_name):
-    row = team_stats[team_stats["team"] == team_name]
+st.header("🏆 Match Winner Prediction")
+
+def get_team_strength(team):
+    row = team_stats[team_stats["team"] == team]
     if not row.empty:
-        return row["runs"].values[0], row["wickets"].values[0]
+        return row["avg_runs"].values[0], row["avg_wickets"].values[0]
     return 0, 0
 
-# =========================
-# MATCH PREDICTION
-# =========================
-st.subheader("🏆 Match Winner Prediction")
-
 if st.button("Predict Winner"):
+    a_runs, a_wickets = get_team_strength(team_a)
+    b_runs, b_wickets = get_team_strength(team_b)
 
-    try:
-        a_runs, a_wickets = get_strength(team_a)
-        b_runs, b_wickets = get_strength(team_b)
+    # Strength score formula
+    strength_a = (a_runs * 0.7) + (a_wickets * 10)
+    strength_b = (b_runs * 0.7) + (b_wickets * 10)
 
-        input_data = pd.DataFrame({
-            "team_a_avg_runs": [a_runs],
-            "team_a_avg_wickets": [a_wickets],
-            "team_b_avg_runs": [b_runs],
-            "team_b_avg_wickets": [b_wickets]
-        })
+    # Probability calculation
+    total_strength = strength_a + strength_b
+    prob_a = (strength_a / total_strength) * 100
+    prob_b = (strength_b / total_strength) * 100
 
-        prediction = match_model.predict(input_data)[0]
+    if strength_a > strength_b:
+        st.success(f"🏆 {team_a} is likely to win!")
+    else:
+        st.success(f"🏆 {team_b} is likely to win!")
 
-        if prediction == 0:
-            st.success(f"🏆 {team_a} is Likely to Win")
-        else:
-            st.success(f"🏆 {team_b} is Likely to Win")
+    st.info(f"📊 Win Probability: {team_a} ({prob_a:.1f}%) vs {team_b} ({prob_b:.1f}%)")
 
-        # Strength score
-        score = (a_runs + a_wickets * 10) - (b_runs + b_wickets * 10)
-        st.info(f"📊 Strength Difference Score: {score:.0f}")
+    st.metric("Strength Score Difference", f"{abs(strength_a - strength_b):.2f}")
 
-    except Exception as e:
-        st.error(f"Error: {e}")
+# =========================
+# FOOTER
+# =========================
+st.markdown("---")
+st.caption("Developed with ❤️ using Streamlit")
